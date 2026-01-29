@@ -95,7 +95,8 @@ type browser struct {
 	rows    []flatRow
 	cursor  int
 	offset  int // first visible row index
-	height  int // visible rows (terminal rows minus status bar)
+	height  int // visible rows (terminal rows minus status/message)
+	width   int // terminal columns
 	message string
 }
 
@@ -118,6 +119,10 @@ func (b *browser) run() error {
 	}
 	defer terminal.DisableRawMode(b.fd, &orig)
 
+	// Switch to alternate screen buffer (like vim/less)
+	fmt.Fprint(b.out, "\x1b[?1049h")
+	defer fmt.Fprint(b.out, "\x1b[?1049l")
+
 	b.refresh()
 	b.render()
 
@@ -125,8 +130,6 @@ func (b *browser) run() error {
 		key := b.readKey()
 		switch key {
 		case keyQuit, keyEsc:
-			// Clear screen region and return
-			fmt.Fprint(b.out, "\x1b[2J\x1b[H")
 			return nil
 		case keyUp:
 			if b.cursor > 0 {
@@ -175,12 +178,13 @@ func (b *browser) refresh() {
 	if b.cursor < 0 {
 		b.cursor = 0
 	}
-	b.updateHeight()
+	b.updateSize()
 	b.scrollToCursor()
 }
 
-func (b *browser) updateHeight() {
-	rows, _ := terminal.TermSize(b.fd)
+func (b *browser) updateSize() {
+	rows, cols := terminal.TermSize(b.fd)
+	b.width = cols
 	// Reserve 2 lines: status bar + message line
 	b.height = rows - 2
 	if b.height < 1 {
@@ -198,12 +202,12 @@ func (b *browser) scrollToCursor() {
 }
 
 func (b *browser) render() {
-	b.updateHeight()
-	// Move to top-left and clear screen
-	fmt.Fprint(b.out, "\x1b[H\x1b[2J")
+	b.updateSize()
+	// Move cursor to top-left; each row clears to end of line
+	fmt.Fprint(b.out, "\x1b[H")
 
 	if len(b.rows) == 0 {
-		fmt.Fprint(b.out, "(empty tree — use 'add' in the REPL first)\r\n")
+		fmt.Fprint(b.out, "(empty tree — use 'add' in the REPL first)\x1b[K\r\n")
 	} else {
 		end := b.offset + b.height
 		if end > len(b.rows) {
@@ -212,27 +216,32 @@ func (b *browser) render() {
 		for i := b.offset; i < end; i++ {
 			if i == b.cursor {
 				// Highlighted row: reverse video
-				fmt.Fprintf(b.out, "\x1b[7m> %s\x1b[0m\r\n", b.rows[i].text)
+				fmt.Fprintf(b.out, "\x1b[7m> %s\x1b[0m\x1b[K\r\n", b.rows[i].text)
 			} else {
-				fmt.Fprintf(b.out, "  %s\r\n", b.rows[i].text)
+				fmt.Fprintf(b.out, "  %s\x1b[K\r\n", b.rows[i].text)
 			}
 		}
 		// Fill remaining lines if tree is shorter than viewport
 		for i := end - b.offset; i < b.height; i++ {
-			fmt.Fprint(b.out, "~\r\n")
+			fmt.Fprint(b.out, "~\x1b[K\r\n")
 		}
 	}
 
 	// Message line
 	if b.message != "" {
-		fmt.Fprintf(b.out, "\x1b[33m%s\x1b[0m\r\n", b.message)
+		fmt.Fprintf(b.out, "\x1b[33m%s\x1b[0m\x1b[K\r\n", b.message)
 		b.message = ""
 	} else {
-		fmt.Fprint(b.out, "\r\n")
+		fmt.Fprint(b.out, "\x1b[K\r\n")
 	}
 
-	// Status bar (reverse video)
+	// Status bar (reverse video), padded to full width
 	status := " \u2191\u2193/jk Navigate  e Edit  t Type  r Root  d Delete  a Add  y Copy  p Paste  c Connect  D Detach  u Undo  ^R Redo  q Quit"
+	if runeLen := len([]rune(status)); runeLen > b.width {
+		status = string([]rune(status)[:b.width])
+	} else if runeLen < b.width {
+		status += strings.Repeat(" ", b.width-runeLen)
+	}
 	fmt.Fprintf(b.out, "\x1b[7m%s\x1b[0m", status)
 }
 
