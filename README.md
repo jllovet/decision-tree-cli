@@ -129,6 +129,10 @@ Available templates for `init`:
 | `auth-flow` | Authentication flow: Start → Authenticated? → Grant access / Show login form |
 | `approval` | Approval workflow: Start → Submit → Approved? → Process / Revise (loop) |
 | `troubleshooting` | Troubleshooting guide: Start → Plugged in? → Plug it in / Check settings → Resolved? |
+| `bug-triage` | Bug triage and incident response with severity routing, investigation, fix/test/deploy cycle |
+| `hiring` | Hiring pipeline from application screening through interviews, offer negotiation, and onboarding |
+| `medical-triage` | Emergency room triage: consciousness check, vitals, pain assessment, trauma routing, imaging |
+| `loan-application` | Loan approval: credit check, debt-to-income, employment, collateral appraisal, underwriting |
 
 Use from the REPL with `init <name>` or from the browser with `i` on an empty tree.
 
