@@ -16,3 +16,7 @@ Thumbs.db
 # Test artifacts
 *.test
 cover.out
+
+# Miscellaneous
+
+**private**
