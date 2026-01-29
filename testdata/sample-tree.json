@@ -1,0 +1,52 @@
+{
+  "name": "auth-flow",
+  "root_id": "n1",
+  "nodes": {
+    "n1": {
+      "id": "n1",
+      "type": 2,
+      "label": "Start"
+    },
+    "n2": {
+      "id": "n2",
+      "type": 0,
+      "label": "Authenticated?"
+    },
+    "n3": {
+      "id": "n3",
+      "type": 1,
+      "label": "Grant access"
+    },
+    "n4": {
+      "id": "n4",
+      "type": 3,
+      "label": "Show login form"
+    },
+    "n5": {
+      "id": "n5",
+      "type": 2,
+      "label": "End"
+    }
+  },
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2"
+    },
+    {
+      "from": "n2",
+      "to": "n3",
+      "label": "yes"
+    },
+    {
+      "from": "n2",
+      "to": "n4",
+      "label": "no"
+    },
+    {
+      "from": "n3",
+      "to": "n5"
+    }
+  ],
+  "counter": 5
+}

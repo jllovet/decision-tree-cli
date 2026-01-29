@@ -1,3 +1,132 @@
 # Decision Tree CLI
 
-This CLI is an interactive tool for designing decision trees in your terminal.
+An interactive terminal tool for building, editing, and visualizing decision trees. Renders to Graphviz DOT, Mermaid diagrams, and ASCII previews. Pure Go standard library, no external dependencies.
+
+## Installation
+
+```bash
+# Install as `dt` on your PATH
+make install
+
+# Or build locally without installing
+make build
+```
+
+## Quick Start
+
+```bash
+dt
+```
+
+```
+Decision Tree CLI (type 'help' for commands)
+> add startend "Start"
+Added node n1
+> add decision "Authenticated?"
+Added node n2
+> add action "Grant access"
+Added node n3
+> add io "Show login form"
+Added node n4
+> connect n1 n2
+Connected n1 -> n2
+> connect n2 n3 yes
+Connected n2 -> n3
+> connect n2 n4 no
+Connected n2 -> n4
+> set-root n1
+Root set to n1
+> preview
+([Start])
+├── <Authenticated?>
+│   ├── [yes] [Grant access]
+│   └── [no] //Show login form//
+> render dot
+digraph untitled {
+  rankdir=TB;
+  ...
+}
+> save auth-flow.json
+Saved to auth-flow.json
+> quit
+Goodbye!
+```
+
+## Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `add <type> <label>` | Add a node. Types: `decision`, `action`, `startend`, `io` |
+| `connect <from> <to> [label]` | Connect two nodes with an optional edge label |
+| `disconnect <from> <to>` | Remove edge between two nodes |
+| `remove <node-id>` | Remove a node and its connected edges |
+| `edit <id> label <text>` | Change a node's label |
+| `edit <id> type <type>` | Change a node's type |
+| `set-root <node-id>` | Set the root node for preview/rendering |
+| `list` | List all nodes with their types |
+| `preview` | ASCII tree preview with box-drawing characters |
+| `render dot` | Output Graphviz DOT diagram |
+| `render mermaid` | Output Mermaid flowchart |
+| `copy <node-id>` | Copy a subtree to clipboard |
+| `paste` | Paste clipboard contents (IDs are remapped) |
+| `save <filename>` | Save tree to JSON file |
+| `load <filename>` | Load tree from JSON file |
+| `undo` | Undo last action |
+| `redo` | Redo last undone action |
+| `help` | Show command help |
+| `quit` / `exit` | Exit the program |
+
+## Node Types and Shapes
+
+| Type | DOT Shape | Mermaid Syntax | ASCII Preview |
+|------|-----------|----------------|---------------|
+| `decision` | diamond | `{label}` | `<label>` |
+| `action` | box | `[label]` | `[label]` |
+| `startend` | ellipse | `([label])` | `([label])` |
+| `io` | parallelogram | `[/label/]` | `//label//` |
+
+## JSON File Format
+
+Trees are saved as JSON with the following structure:
+
+```json
+{
+  "name": "auth-flow",
+  "root_id": "n1",
+  "nodes": {
+    "n1": { "id": "n1", "type": 0, "label": "Authenticated?" }
+  },
+  "edges": [
+    { "from": "n1", "to": "n2", "label": "yes" }
+  ],
+  "counter": 2
+}
+```
+
+Node type values: `0` = decision, `1` = action, `2` = startend, `3` = io.
+
+## Project Structure
+
+```
+cmd/decision-tree-cli/   Main entrypoint
+internal/
+  model/                 Node, Edge, Tree data structures
+  tree/                  Operations, clipboard, undo/redo history
+  render/                DOT and Mermaid renderers
+  preview/               ASCII tree preview
+  storage/               JSON save/load
+  cli/                   Parser, commands, REPL loop
+testdata/                Sample fixtures and golden files
+docs/                    Architecture and examples
+```
+
+## Development
+
+```bash
+make install  # Install as `dt` to GOPATH/bin
+make build    # Build binary to bin/
+make test     # Run all tests
+make vet      # Static analysis
+make run      # Build and run
+make clean    # Remove build artifacts
+```

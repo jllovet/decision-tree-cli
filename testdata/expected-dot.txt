@@ -1,0 +1,14 @@
+digraph auth_flow {
+  rankdir=TB;
+
+  n1 [label="Start", shape=ellipse];
+  n2 [label="Authenticated?", shape=diamond];
+  n3 [label="Grant access", shape=box];
+  n4 [label="Show login form", shape=parallelogram];
+  n5 [label="End", shape=ellipse];
+
+  n1 -> n2;
+  n2 -> n3 [label="yes"];
+  n2 -> n4 [label="no"];
+  n3 -> n5;
+}

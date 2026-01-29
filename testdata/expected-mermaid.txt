@@ -1,0 +1,11 @@
+flowchart TB
+  n1([Start])
+  n2{Authenticated?}
+  n3[Grant access]
+  n4[/Show login form/]
+  n5([End])
+
+  n1 --> n2
+  n2 -- yes --> n3
+  n2 -- no --> n4
+  n3 --> n5
