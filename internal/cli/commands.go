@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/jllovet/decision-tree-cli/internal/model"
@@ -210,7 +211,7 @@ func (s *Session) cmdPreview() {
 
 func (s *Session) cmdRender(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintln(s.Out, "Usage: render <dot|mermaid>")
+		fmt.Fprintln(s.Out, "Usage: render <dot|mermaid> [filename]")
 		return
 	}
 	var r render.Renderer
@@ -226,6 +227,14 @@ func (s *Session) cmdRender(args []string) {
 	out, err := r.Render(s.Tree)
 	if err != nil {
 		fmt.Fprintf(s.Out, "Error: %v\n", err)
+		return
+	}
+	if len(args) >= 2 {
+		if err := os.WriteFile(args[1], []byte(out), 0644); err != nil {
+			fmt.Fprintf(s.Out, "Error: %v\n", err)
+			return
+		}
+		fmt.Fprintf(s.Out, "Wrote %s to %s\n", args[0], args[1])
 		return
 	}
 	fmt.Fprint(s.Out, out)
@@ -329,7 +338,7 @@ func (s *Session) cmdHelp() {
   list                       List all nodes
   preview                    Show ASCII tree preview
   browse                     Interactive tree browser
-  render <dot|mermaid>       Render as DOT or Mermaid diagram
+  render <dot|mermaid> [file] Render as DOT or Mermaid (optionally to file)
   copy <node-id>             Copy a subtree to clipboard
   paste                      Paste clipboard contents
   save <filename>            Save tree to JSON file
