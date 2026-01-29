@@ -38,6 +38,31 @@ func NewLineReader(in io.Reader, out io.Writer) *LineReader {
 	return lr
 }
 
+// wordLeft returns the position at the start of the word to the left of pos.
+// It skips spaces first, then skips non-space characters.
+func wordLeft(buf []byte, pos int) int {
+	for pos > 0 && buf[pos-1] == ' ' {
+		pos--
+	}
+	for pos > 0 && buf[pos-1] != ' ' {
+		pos--
+	}
+	return pos
+}
+
+// wordRight returns the position at the end of the word to the right of pos.
+// It skips non-space characters first, then skips spaces.
+func wordRight(buf []byte, pos int) int {
+	n := len(buf)
+	for pos < n && buf[pos] != ' ' {
+		pos++
+	}
+	for pos < n && buf[pos] == ' ' {
+		pos++
+	}
+	return pos
+}
+
 // isTerminal checks if f is a terminal by attempting to get termios settings.
 func isTerminal(f *os.File) bool {
 	return isTerminalFd(f.Fd())
@@ -124,6 +149,27 @@ func (lr *LineReader) readLineTTY(prompt string) (string, error) {
 			pos = 0
 			writePromptAndBuf()
 
+		case b[0] == 0x01:
+			// Ctrl+A: move to start of line
+			pos = 0
+			writePromptAndBuf()
+
+		case b[0] == 0x05:
+			// Ctrl+E: move to end of line
+			pos = len(buf)
+			writePromptAndBuf()
+
+		case b[0] == 0x0b:
+			// Ctrl+K: delete from cursor to end of line
+			buf = buf[:pos]
+			writePromptAndBuf()
+
+		case b[0] == 0x15:
+			// Ctrl+U: delete from cursor to start of line
+			buf = buf[pos:]
+			pos = 0
+			writePromptAndBuf()
+
 		case b[0] == 0x04:
 			// Ctrl+D: EOF
 			if len(buf) == 0 {
@@ -159,7 +205,34 @@ func (lr *LineReader) readLineTTY(prompt string) (string, error) {
 						pos--
 						fmt.Fprint(lr.out, "\x1b[D")
 					}
+				case '1': // Extended sequence: \x1b[1;3C / \x1b[1;3D
+					ext := make([]byte, 3) // ;3C or ;3D
+					lr.in.Read(ext)
+					if ext[0] == ';' && ext[1] == '3' {
+						switch ext[2] {
+						case 'C': // Opt+Right: word right
+							pos = wordRight(buf, pos)
+							writePromptAndBuf()
+						case 'D': // Opt+Left: word left
+							pos = wordLeft(buf, pos)
+							writePromptAndBuf()
+						}
+					}
 				}
+			} else if seq[0] == 0x7f {
+				// Opt+Backspace: delete word before cursor
+				newPos := wordLeft(buf, pos)
+				buf = append(buf[:newPos], buf[pos:]...)
+				pos = newPos
+				writePromptAndBuf()
+			} else if seq[0] == 'b' {
+				// Alt+B: word left
+				pos = wordLeft(buf, pos)
+				writePromptAndBuf()
+			} else if seq[0] == 'f' {
+				// Alt+F: word right
+				pos = wordRight(buf, pos)
+				writePromptAndBuf()
 			}
 
 		case b[0] >= 0x20:
