@@ -11,6 +11,7 @@ import (
 // Run starts the REPL loop with the given reader and writer.
 func Run(r io.Reader, w io.Writer) {
 	session := NewSession(w)
+	session.In = r
 	fmt.Fprintln(w, "Decision Tree CLI (type 'help' for commands)")
 
 	lr := terminal.NewLineReader(r, w)

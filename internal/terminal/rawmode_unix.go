@@ -6,7 +6,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func enableRawMode(fd uintptr) (unix.Termios, error) {
+func EnableRawMode(fd uintptr) (unix.Termios, error) {
 	orig, err := unix.IoctlGetTermios(int(fd), ioctlGetTermios)
 	if err != nil {
 		return unix.Termios{}, err
@@ -31,6 +31,6 @@ func enableRawMode(fd uintptr) (unix.Termios, error) {
 	return *orig, nil
 }
 
-func disableRawMode(fd uintptr, orig *unix.Termios) error {
+func DisableRawMode(fd uintptr, orig *unix.Termios) error {
 	return unix.IoctlSetTermios(int(fd), ioctlSetTermios, orig)
 }

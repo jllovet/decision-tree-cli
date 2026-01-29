@@ -94,7 +94,7 @@ func (lr *LineReader) readLinePipe(prompt string) (string, error) {
 }
 
 func (lr *LineReader) readLineTTY(prompt string) (string, error) {
-	orig, err := enableRawMode(lr.fd)
+	orig, err := EnableRawMode(lr.fd)
 	if err != nil {
 		// Fall back to pipe mode if raw mode fails
 		if lr.scanner == nil {
@@ -103,7 +103,7 @@ func (lr *LineReader) readLineTTY(prompt string) (string, error) {
 		lr.isTTY = false
 		return lr.readLinePipe(prompt)
 	}
-	defer disableRawMode(lr.fd, &orig)
+	defer DisableRawMode(lr.fd, &orig)
 
 	lr.history.Reset()
 

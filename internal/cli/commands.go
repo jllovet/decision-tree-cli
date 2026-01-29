@@ -17,6 +17,7 @@ type Session struct {
 	Tree      *model.Tree
 	History   *tree.History
 	Clipboard *tree.Clipboard
+	In        io.Reader
 	Out       io.Writer
 }
 
@@ -61,6 +62,8 @@ func (s *Session) Execute(cmd ParsedCommand) bool {
 		s.cmdSave(cmd.Args)
 	case "load":
 		s.cmdLoad(cmd.Args)
+	case "browse":
+		s.cmdBrowse()
 	case "undo":
 		s.cmdUndo()
 	case "redo":
@@ -303,6 +306,17 @@ func (s *Session) cmdRedo() {
 	fmt.Fprintln(s.Out, "Redone")
 }
 
+func (s *Session) cmdBrowse() {
+	if s.In == nil {
+		fmt.Fprintln(s.Out, "Error: browse requires an interactive terminal")
+		return
+	}
+	b := newBrowser(s, s.In, s.Out)
+	if err := b.run(); err != nil {
+		fmt.Fprintf(s.Out, "Error: %v\n", err)
+	}
+}
+
 func (s *Session) cmdHelp() {
 	help := `Commands:
   add <type> <label>         Add a node (types: decision, action, startend, io)
@@ -314,6 +328,7 @@ func (s *Session) cmdHelp() {
   set-root <node-id>         Set the root node
   list                       List all nodes
   preview                    Show ASCII tree preview
+  browse                     Interactive tree browser
   render <dot|mermaid>       Render as DOT or Mermaid diagram
   copy <node-id>             Copy a subtree to clipboard
   paste                      Paste clipboard contents
