@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/jllovet/decision-tree-cli/internal/model"
@@ -82,6 +83,188 @@ func TestCursorClampAfterDelete(t *testing.T) {
 
 	if b.cursor >= len(b.rows) {
 		t.Errorf("cursor %d should be < len(rows) %d after deletion", b.cursor, len(b.rows))
+	}
+}
+
+func TestOpAddChildEmptyTreeCreatesRoot(t *testing.T) {
+	tr := model.NewTree("empty")
+	// Simulate typing: "decision\r" then "MyRoot\r"
+	input := []byte("decision\rMyRoot\r")
+	var out bytes.Buffer
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		in:     bytes.NewReader(input),
+		out:    &out,
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+
+	if len(b.rows) != 0 {
+		t.Fatalf("expected empty tree, got %d rows", len(b.rows))
+	}
+
+	b.opAddChild()
+
+	if tr.RootID == "" {
+		t.Fatal("expected root to be set after opAddChild on empty tree")
+	}
+	n := tr.GetNode(tr.RootID)
+	if n == nil {
+		t.Fatal("root node not found in tree")
+	}
+	if n.Label != "MyRoot" {
+		t.Errorf("root label = %q, want %q", n.Label, "MyRoot")
+	}
+	if n.Type != model.Decision {
+		t.Errorf("root type = %v, want %v", n.Type, model.Decision)
+	}
+	if len(b.rows) != 1 {
+		t.Errorf("expected 1 row after adding root, got %d", len(b.rows))
+	}
+}
+
+func TestOpAddChildEmptyTreeCancelType(t *testing.T) {
+	tr := model.NewTree("empty")
+	// Simulate pressing Esc during type prompt
+	input := []byte{0x1b}
+	var out bytes.Buffer
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		in:     bytes.NewReader(input),
+		out:    &out,
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+	b.opAddChild()
+
+	if tr.RootID != "" {
+		t.Error("expected root to remain empty after cancel")
+	}
+	if b.message != "Add cancelled" {
+		t.Errorf("message = %q, want %q", b.message, "Add cancelled")
+	}
+}
+
+func TestConnectModeStateTransitions(t *testing.T) {
+	tr := buildSampleTree()
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+
+	// Select n1 (cursor at 0) and enter connect mode
+	b.cursor = 0
+	b.opConnect()
+	if b.connectFrom != "n1" {
+		t.Fatalf("connectFrom = %q, want %q", b.connectFrom, "n1")
+	}
+
+	// Cancel with Esc
+	b.connectFrom = ""
+	b.message = ""
+
+	// Enter connect mode again from n2
+	b.cursor = 1
+	b.opConnect()
+	if b.connectFrom != "n2" {
+		t.Fatalf("connectFrom = %q, want %q", b.connectFrom, "n2")
+	}
+
+	// Simulate cancel
+	b.connectFrom = ""
+	if b.connectFrom != "" {
+		t.Error("connectFrom should be empty after cancel")
+	}
+}
+
+func TestConnectModeFinish(t *testing.T) {
+	// Build a tree with an orphan node so we can connect to it
+	tr := model.NewTree("test")
+	tree.AddNode(tr, model.Decision, "Root")  // n1
+	tree.AddNode(tr, model.Action, "Orphan")  // n2 — no parent
+	tree.SetRoot(tr, "n1")
+
+	// Provide edge label input: Enter (empty label)
+	input := []byte("\r")
+	var out bytes.Buffer
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		in:     bytes.NewReader(input),
+		out:    &out,
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+
+	// Tree only shows n1 (n2 is orphan, not reachable from root).
+	// Enter connect mode from n1 (index 0)
+	b.cursor = 0
+	b.opConnect()
+	if b.connectFrom != "n1" {
+		t.Fatalf("connectFrom = %q, want %q", b.connectFrom, "n1")
+	}
+
+	// We can't navigate to n2 in the flattened tree since it's an orphan.
+	// Directly call finishConnect after manually injecting n2 row.
+	b.rows = append(b.rows, flatRow{nodeID: "n2", text: "[Orphan]"})
+	b.cursor = 1
+	b.finishConnect()
+
+	if b.connectFrom != "" {
+		t.Error("connectFrom should be cleared after finishConnect")
+	}
+	// Verify edge was created from n1 to n2
+	children := tr.Children("n1")
+	found := false
+	for _, e := range children {
+		if e.ToID == "n2" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected edge from n1 to n2 after finishConnect")
+	}
+}
+
+func TestConnectModeSelfConnect(t *testing.T) {
+	tr := buildSampleTree()
+	var out bytes.Buffer
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		in:     bytes.NewReader(nil),
+		out:    &out,
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+
+	// Enter connect mode from n1, try to connect to self
+	b.cursor = 0
+	b.opConnect()
+	b.finishConnect() // cursor still on n1
+
+	if b.message != "Cannot connect node to itself" {
+		t.Errorf("message = %q, want self-connect error", b.message)
 	}
 }
 

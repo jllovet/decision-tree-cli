@@ -92,12 +92,13 @@ type browser struct {
 	out     io.Writer
 	fd      uintptr
 
-	rows    []flatRow
-	cursor  int
-	offset  int // first visible row index
-	height  int // visible rows (terminal rows minus status/message)
-	width   int // terminal columns
-	message string
+	rows        []flatRow
+	cursor      int
+	offset      int // first visible row index
+	height      int // visible rows (terminal rows minus status/message)
+	width       int // terminal columns
+	message     string
+	connectFrom string // when non-empty, browser is in connect mode
 }
 
 func newBrowser(s *Session, in io.Reader, out io.Writer) *browser {
@@ -128,6 +129,32 @@ func (b *browser) run() error {
 
 	for {
 		key := b.readKey()
+
+		// Connect mode: only navigation, Enter, and Esc are active.
+		if b.connectFrom != "" {
+			switch key {
+			case keyUp:
+				if b.cursor > 0 {
+					b.cursor--
+					b.scrollToCursor()
+				}
+			case keyDown:
+				if b.cursor < len(b.rows)-1 {
+					b.cursor++
+					b.scrollToCursor()
+				}
+			case keyEnter:
+				b.finishConnect()
+			case keyEsc, keyQuit:
+				b.connectFrom = ""
+				b.message = "Connect cancelled"
+			default:
+				continue
+			}
+			b.render()
+			continue
+		}
+
 		switch key {
 		case keyQuit, keyEsc:
 			return nil
@@ -207,18 +234,26 @@ func (b *browser) render() {
 	fmt.Fprint(b.out, "\x1b[H")
 
 	if len(b.rows) == 0 {
-		fmt.Fprint(b.out, "(empty tree — use 'add' in the REPL first)\x1b[K\r\n")
+		fmt.Fprint(b.out, "(empty tree — press 'a' to add the root node)\x1b[K\r\n")
 	} else {
 		end := b.offset + b.height
 		if end > len(b.rows) {
 			end = len(b.rows)
 		}
 		for i := b.offset; i < end; i++ {
+			marker := "  "
 			if i == b.cursor {
-				// Highlighted row: reverse video
-				fmt.Fprintf(b.out, "\x1b[7m> %s\x1b[0m\x1b[K\r\n", b.rows[i].text)
+				marker = "> "
+			}
+			if b.connectFrom != "" && b.rows[i].nodeID == b.connectFrom {
+				marker = "+ "
+			}
+			if i == b.cursor {
+				fmt.Fprintf(b.out, "\x1b[7m%s%s\x1b[0m\x1b[K\r\n", marker, b.rows[i].text)
+			} else if b.connectFrom != "" && b.rows[i].nodeID == b.connectFrom {
+				fmt.Fprintf(b.out, "\x1b[33m%s%s\x1b[0m\x1b[K\r\n", marker, b.rows[i].text)
 			} else {
-				fmt.Fprintf(b.out, "  %s\x1b[K\r\n", b.rows[i].text)
+				fmt.Fprintf(b.out, "%s%s\x1b[K\r\n", marker, b.rows[i].text)
 			}
 		}
 		// Fill remaining lines if tree is shorter than viewport
@@ -236,7 +271,12 @@ func (b *browser) render() {
 	}
 
 	// Status bar (reverse video), padded to full width
-	status := " \u2191\u2193/jk Navigate  e Edit  t Type  r Root  d Delete  a Add  y Copy  p Paste  c Connect  D Detach  u Undo  ^R Redo  q Quit"
+	var status string
+	if b.connectFrom != "" {
+		status = fmt.Sprintf(" Connect %s \u2192 ? | \u2191\u2193 Navigate  Enter Confirm  Esc Cancel", b.connectFrom)
+	} else {
+		status = " \u2191\u2193/jk Navigate  e Edit  t Type  r Root  d Delete  a Add  y Copy  p Paste  c Connect  D Detach  u Undo  ^R Redo  q Quit"
+	}
 	if runeLen := len([]rune(status)); runeLen > b.width {
 		status = string([]rune(status)[:b.width])
 	} else if runeLen < b.width {
@@ -251,6 +291,7 @@ const (
 	keyDown
 	keyQuit
 	keyEsc
+	keyEnter
 	keyEdit
 	keyCycleType
 	keySetRoot
@@ -270,6 +311,8 @@ func (b *browser) readKey() int {
 		return keyQuit
 	}
 	switch buf[0] {
+	case '\r', '\n':
+		return keyEnter
 	case 'q':
 		return keyQuit
 	case 0x1b: // Escape sequence
@@ -440,6 +483,12 @@ func (b *browser) opDelete() {
 }
 
 func (b *browser) opAddChild() {
+	// Empty tree: add root node flow.
+	if len(b.rows) == 0 {
+		b.addRoot()
+		return
+	}
+
 	parentID := b.selectedNodeID()
 	if parentID == "" {
 		return
@@ -530,17 +579,53 @@ func (b *browser) opPaste() {
 	b.refresh()
 }
 
-func (b *browser) opConnect() {
-	fromID := b.selectedNodeID()
-	if fromID == "" {
+func (b *browser) addRoot() {
+	typeStr, ok := b.prompt("Root type (decision/action/startend/io): ")
+	if !ok || typeStr == "" {
+		b.message = "Add cancelled"
 		return
 	}
-	toID, ok := b.prompt("Connect to node ID: ")
-	if !ok || toID == "" {
+	nodeType, err := model.ParseNodeType(strings.TrimSpace(typeStr))
+	if err != nil {
+		b.message = "Error: " + err.Error()
+		return
+	}
+	label, ok := b.prompt("Root label: ")
+	if !ok || label == "" {
+		b.message = "Add cancelled"
+		return
+	}
+	addCmd := tree.NewAddNodeCmd(nodeType, label)
+	if err := b.session.History.Execute(b.session.Tree, addCmd); err != nil {
+		b.message = "Error: " + err.Error()
+		return
+	}
+	type idGetter interface{ ID() string }
+	newID := ""
+	if ig, ok := addCmd.(idGetter); ok {
+		newID = ig.ID()
+	}
+	setRootCmd := tree.NewSetRootCmd(newID)
+	if err := b.session.History.Execute(b.session.Tree, setRootCmd); err != nil {
+		b.message = "Error setting root: " + err.Error()
+		return
+	}
+	b.message = fmt.Sprintf("Created root node %s", newID)
+	b.refresh()
+}
+
+func (b *browser) finishConnect() {
+	toID := b.selectedNodeID()
+	fromID := b.connectFrom
+	b.connectFrom = ""
+	if toID == "" {
 		b.message = "Connect cancelled"
 		return
 	}
-	toID = strings.TrimSpace(toID)
+	if fromID == toID {
+		b.message = "Cannot connect node to itself"
+		return
+	}
 	edgeLabel, ok := b.prompt("Edge label (Enter for none): ")
 	if !ok {
 		edgeLabel = ""
@@ -550,8 +635,16 @@ func (b *browser) opConnect() {
 		b.message = "Error: " + err.Error()
 		return
 	}
-	b.message = fmt.Sprintf("Connected %s → %s", fromID, toID)
+	b.message = fmt.Sprintf("Connected %s \u2192 %s", fromID, toID)
 	b.refresh()
+}
+
+func (b *browser) opConnect() {
+	fromID := b.selectedNodeID()
+	if fromID == "" {
+		return
+	}
+	b.connectFrom = fromID
 }
 
 func (b *browser) opDisconnect() {
