@@ -9,6 +9,7 @@ internal/
   render/    Output renderers (DOT, Mermaid)
   preview/   ASCII tree visualization
   storage/   JSON persistence
+  terminal/  Terminal raw mode, line editing, input history
   cli/       User interface (parser, commands, REPL)
 ```
 
@@ -40,5 +41,5 @@ Both DOT and Mermaid renderers implement `Renderer.Render(*model.Tree) (string, 
 ### Testability
 The REPL accepts `io.Reader` and `io.Writer` parameters, allowing full integration testing via piped input/output without needing a real terminal.
 
-### No External Dependencies
-The entire project uses only Go's standard library. This keeps the dependency tree clean and builds reproducible.
+### Minimal External Dependencies
+The project uses `golang.org/x/sys` for portable terminal raw mode (ioctl access) and otherwise relies only on Go's standard library.

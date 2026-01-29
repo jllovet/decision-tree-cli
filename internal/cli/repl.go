@@ -1,10 +1,11 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/jllovet/decision-tree-cli/internal/terminal"
 )
 
 // Run starts the REPL loop with the given reader and writer.
@@ -12,13 +13,14 @@ func Run(r io.Reader, w io.Writer) {
 	session := NewSession(w)
 	fmt.Fprintln(w, "Decision Tree CLI (type 'help' for commands)")
 
-	scanner := bufio.NewScanner(r)
+	lr := terminal.NewLineReader(r, w)
+	defer lr.Close()
 	for {
-		fmt.Fprint(w, "> ")
-		if !scanner.Scan() {
+		line, err := lr.ReadLine("> ")
+		if err != nil {
 			break
 		}
-		line := strings.TrimSpace(scanner.Text())
+		line = strings.TrimSpace(line)
 		cmd := Parse(line)
 		if !session.Execute(cmd) {
 			fmt.Fprintln(w, "Goodbye!")
