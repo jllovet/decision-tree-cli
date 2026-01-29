@@ -18,8 +18,29 @@ make build
 dt
 ```
 
+### Initialize from a template
+
 ```
 Decision Tree CLI (type 'help' for commands)
+> init
+Available templates:
+  1. auth-flow — Authentication flow
+  2. approval — Approval workflow
+  3. troubleshooting — Troubleshooting guide
+Usage: init <template-name>
+> init auth-flow
+Initialized tree from template "auth-flow" (5 nodes)
+> preview
+([Start])
+└── <Authenticated?>
+    ├── [yes] [Grant access]
+    │   └── ([End])
+    └── [no] [Show login form]
+```
+
+### Build a tree manually
+
+```
 > add startend "Start"
 Added node n1
 > add decision "Authenticated?"
@@ -56,6 +77,7 @@ Goodbye!
 
 | Command | Description |
 |---------|-------------|
+| `init [name]` | Initialize tree from a template (list templates with no args) |
 | `add <type> <label>` | Add a node. Types: `decision`, `action`, `startend`, `io` |
 | `connect <from> <to> [label]` | Connect two nodes with an optional edge label |
 | `disconnect <from> <to>` | Remove edge between two nodes |
@@ -65,16 +87,50 @@ Goodbye!
 | `set-root <node-id>` | Set the root node for preview/rendering |
 | `list` | List all nodes with their types |
 | `preview` | ASCII tree preview with box-drawing characters |
-| `render dot` | Output Graphviz DOT diagram |
-| `render mermaid` | Output Mermaid flowchart |
+| `render dot [file]` | Output Graphviz DOT diagram (optionally to file) |
+| `render mermaid [file]` | Output Mermaid flowchart (optionally to file) |
 | `copy <node-id>` | Copy a subtree to clipboard |
 | `paste` | Paste clipboard contents (IDs are remapped) |
 | `save <filename>` | Save tree to JSON file |
 | `load <filename>` | Load tree from JSON file |
 | `undo` | Undo last action |
 | `redo` | Redo last undone action |
+| `browse` | Open interactive full-screen tree browser |
 | `help` | Show command help |
 | `quit` / `exit` | Exit the program |
+
+## Interactive Browser
+
+Launch a full-screen tree browser with `browse`:
+
+```
+> browse
+```
+
+Key bindings:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move cursor down / up |
+| `a` | Add child node (or root if tree is empty) |
+| `d` | Delete selected node |
+| `e` | Edit selected node |
+| `c` | Connect mode (select source, move to target, confirm) |
+| `i` | Init from template (empty tree only) |
+| `u` / `r` | Undo / Redo |
+| `q` | Quit browser |
+
+## Templates
+
+Available templates for `init`:
+
+| Name | Description |
+|------|-------------|
+| `auth-flow` | Authentication flow: Start → Authenticated? → Grant access / Show login form |
+| `approval` | Approval workflow: Start → Submit → Approved? → Process / Revise (loop) |
+| `troubleshooting` | Troubleshooting guide: Start → Plugged in? → Plug it in / Check settings → Resolved? |
+
+Use from the REPL with `init <name>` or from the browser with `i` on an empty tree.
 
 ## Node Types and Shapes
 
@@ -115,9 +171,11 @@ internal/
   render/                DOT and Mermaid renderers
   preview/               ASCII tree preview
   storage/               JSON save/load
-  cli/                   Parser, commands, REPL loop
+  cli/                   Parser, commands, REPL loop, templates, browser
+  terminal/              Raw-mode terminal I/O and line reader
 testdata/                Sample fixtures and golden files
 docs/                    Architecture and examples
+.github/workflows/       CI: build, test, security scanning
 ```
 
 ## Development
@@ -130,3 +188,14 @@ make vet      # Static analysis
 make run      # Build and run
 make clean    # Remove build artifacts
 ```
+
+### CI
+
+A GitHub Actions workflow runs on push and PR to `main`:
+
+- **Build & Vet** — `go build`, `go vet`, `go test`
+- **govulncheck** — Scans dependencies for known vulnerabilities
+- **gosec** — Security-focused static analysis
+- **staticcheck** — Advanced Go linter
+- **Dependency Review** — Reviews new dependencies on PRs
+- **Module Integrity** — Verifies checksums and tidy modules
