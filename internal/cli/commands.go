@@ -63,6 +63,8 @@ func (s *Session) Execute(cmd ParsedCommand) bool {
 		s.cmdSave(cmd.Args)
 	case "load":
 		s.cmdLoad(cmd.Args)
+	case "init":
+		s.cmdInit(cmd.Args)
 	case "browse":
 		s.cmdBrowse()
 	case "undo":
@@ -315,6 +317,30 @@ func (s *Session) cmdRedo() {
 	fmt.Fprintln(s.Out, "Redone")
 }
 
+func (s *Session) cmdInit(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(s.Out, "Available templates:")
+		for i, tmpl := range templates {
+			fmt.Fprintf(s.Out, "  %d. %s — %s\n", i+1, tmpl.Name, tmpl.Description)
+		}
+		fmt.Fprintln(s.Out, "Usage: init <template-name>")
+		return
+	}
+	tmpl := findTemplate(args[0])
+	if tmpl == nil {
+		fmt.Fprintf(s.Out, "Unknown template: %s\n", args[0])
+		fmt.Fprintln(s.Out, "Available templates:")
+		for i, t := range templates {
+			fmt.Fprintf(s.Out, "  %d. %s — %s\n", i+1, t.Name, t.Description)
+		}
+		return
+	}
+	s.Tree = tmpl.Build()
+	s.History = tree.NewHistory()
+	s.Clipboard = nil
+	fmt.Fprintf(s.Out, "Initialized tree from template %q (%d nodes)\n", tmpl.Name, len(s.Tree.Nodes))
+}
+
 func (s *Session) cmdBrowse() {
 	if s.In == nil {
 		fmt.Fprintln(s.Out, "Error: browse requires an interactive terminal")
@@ -337,6 +363,7 @@ func (s *Session) cmdHelp() {
   set-root <node-id>         Set the root node
   list                       List all nodes
   preview                    Show ASCII tree preview
+  init [name]                Initialize tree from a template
   browse                     Interactive tree browser
   render <dot|mermaid> [file] Render as DOT or Mermaid (optionally to file)
   copy <node-id>             Copy a subtree to clipboard

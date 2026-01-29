@@ -186,6 +186,8 @@ func (b *browser) run() error {
 			b.opConnect()
 		case keyDisconnect:
 			b.opDisconnect()
+		case keyInit:
+			b.opInit()
 		case keyUndo:
 			b.opUndo()
 		case keyRedo:
@@ -234,7 +236,7 @@ func (b *browser) render() {
 	fmt.Fprint(b.out, "\x1b[H")
 
 	if len(b.rows) == 0 {
-		fmt.Fprint(b.out, "(empty tree — press 'a' to add the root node)\x1b[K\r\n")
+		fmt.Fprint(b.out, "(empty tree — press 'a' to add root, 'i' to init from a template)\x1b[K\r\n")
 	} else {
 		end := b.offset + b.height
 		if end > len(b.rows) {
@@ -303,6 +305,7 @@ const (
 	keyDisconnect
 	keyUndo
 	keyRedo
+	keyInit
 )
 
 func (b *browser) readKey() int {
@@ -353,6 +356,8 @@ func (b *browser) readKey() int {
 		return keyConnect
 	case 'D':
 		return keyDisconnect
+	case 'i':
+		return keyInit
 	case 'u':
 		return keyUndo
 	case 0x12: // Ctrl+R
@@ -663,6 +668,36 @@ func (b *browser) opDisconnect() {
 		return
 	}
 	b.message = fmt.Sprintf("Disconnected %s from %s", id, parentEdge.FromID)
+	b.refresh()
+}
+
+func (b *browser) opInit() {
+	if len(b.rows) != 0 {
+		b.message = "Init only works on an empty tree"
+		return
+	}
+	menu := "Templates:\n"
+	for i, tmpl := range templates {
+		menu += fmt.Sprintf("  %d. %s — %s\n", i+1, tmpl.Name, tmpl.Description)
+	}
+	b.message = menu
+	b.render()
+
+	choice, ok := b.prompt(fmt.Sprintf("Pick template (1-%d): ", len(templates)))
+	if !ok || choice == "" {
+		b.message = "Init cancelled"
+		return
+	}
+	var idx int
+	if _, err := fmt.Sscanf(choice, "%d", &idx); err != nil || idx < 1 || idx > len(templates) {
+		b.message = "Invalid choice"
+		return
+	}
+	tmpl := templates[idx-1]
+	b.session.Tree = tmpl.Build()
+	b.session.History = tree.NewHistory()
+	b.session.Clipboard = nil
+	b.message = fmt.Sprintf("Initialized from %q (%d nodes)", tmpl.Name, len(b.session.Tree.Nodes))
 	b.refresh()
 }
 

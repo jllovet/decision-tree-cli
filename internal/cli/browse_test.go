@@ -268,6 +268,59 @@ func TestConnectModeSelfConnect(t *testing.T) {
 	}
 }
 
+func TestOpInitEmptyTree(t *testing.T) {
+	tr := model.NewTree("empty")
+	// Simulate typing "1\r" to pick the first template
+	input := []byte("1\r")
+	var out bytes.Buffer
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		in:     bytes.NewReader(input),
+		out:    &out,
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+
+	if len(b.rows) != 0 {
+		t.Fatalf("expected empty tree, got %d rows", len(b.rows))
+	}
+
+	b.opInit()
+
+	if len(b.session.Tree.Nodes) == 0 {
+		t.Error("tree should have nodes after opInit")
+	}
+	if b.session.Tree.RootID == "" {
+		t.Error("tree should have root after opInit")
+	}
+}
+
+func TestOpInitNonEmptyTree(t *testing.T) {
+	tr := buildSampleTree()
+	var out bytes.Buffer
+	b := &browser{
+		session: &Session{
+			Tree:    tr,
+			History: tree.NewHistory(),
+		},
+		in:     bytes.NewReader(nil),
+		out:    &out,
+		height: 20,
+		width:  80,
+	}
+	b.refresh()
+
+	b.opInit()
+
+	if b.message != "Init only works on an empty tree" {
+		t.Errorf("message = %q, want error about non-empty tree", b.message)
+	}
+}
+
 func TestViewportOffset(t *testing.T) {
 	b := &browser{
 		height: 3,

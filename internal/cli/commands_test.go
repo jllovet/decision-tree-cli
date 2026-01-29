@@ -341,3 +341,36 @@ func TestCmdEmptyLine(t *testing.T) {
 		t.Error("empty line should continue")
 	}
 }
+
+func TestCmdInitNoArgs(t *testing.T) {
+	_, out := runCommands(t, "init")
+	if !strings.Contains(out, "Available templates:") {
+		t.Errorf("expected template list, got %q", out)
+	}
+	if !strings.Contains(out, "auth-flow") {
+		t.Errorf("expected auth-flow in list, got %q", out)
+	}
+}
+
+func TestCmdInitWithName(t *testing.T) {
+	s, out := runCommands(t, "init auth-flow")
+	if !strings.Contains(out, "Initialized tree from template") {
+		t.Errorf("expected confirmation, got %q", out)
+	}
+	if len(s.Tree.Nodes) == 0 {
+		t.Error("tree should have nodes after init")
+	}
+	if s.Tree.RootID == "" {
+		t.Error("tree should have root after init")
+	}
+}
+
+func TestCmdInitUnknown(t *testing.T) {
+	_, out := runCommands(t, "init bogus")
+	if !strings.Contains(out, "Unknown template") {
+		t.Errorf("expected unknown template error, got %q", out)
+	}
+	if !strings.Contains(out, "Available templates:") {
+		t.Errorf("expected template list in error output, got %q", out)
+	}
+}
